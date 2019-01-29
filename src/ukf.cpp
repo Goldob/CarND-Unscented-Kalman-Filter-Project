@@ -4,8 +4,6 @@
 
 #define EPS 1e-8
 
-#define NORMALIZE_ANGLE(a) (a = std::fmod(a + M_PI, 2*M_PI) - M_PI)
-
 using std::cos;
 using std::sin;
 using std::abs;
@@ -89,7 +87,7 @@ UKF::UKF() {
 UKF::~UKF() {}
 
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
-  float delta_t =  (time_us_ - meas_package.timestamp_) * 1e-6;
+  float delta_t =  (meas_package.timestamp_ - time_us_) * 1e-6;
   time_us_ = meas_package.timestamp_;
 
   /**
@@ -214,8 +212,9 @@ void UKF::Prediction(double delta_t) {
     sig_point_pred(3) += 0.5 * pow(delta_t, 2) * phi_dd;
     sig_point_pred(4) += delta_t * phi_dd;
 
-    NORMALIZE_ANGLE(sig_point_pred(3));
-    NORMALIZE_ANGLE(sig_point_pred(4));
+    // normalize angle phi
+    while (sig_point_pred(3) >  M_PI) sig_point_pred(3) -= 2*M_PI;
+    while (sig_point_pred(3) < -M_PI) sig_point_pred(3) += 2*M_PI;
 
     Xsig_pred.col(i) = sig_point_pred;
   }
@@ -228,8 +227,9 @@ void UKF::Prediction(double delta_t) {
     x_ += weights_(i) * Xsig_pred.col(i);
   }
 
-  NORMALIZE_ANGLE(x_(3));
-  NORMALIZE_ANGLE(x_(4));
+  // normalize angle phi
+  while (x_(3) >  M_PI) x_(3) -= 2*M_PI;
+  while (x_(3) < -M_PI) x_(3) += 2*M_PI;
 
   /**
    * Calculate predicted state covariance

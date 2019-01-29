@@ -18,16 +18,22 @@ UKF::UKF() {
   use_radar_ = true;
 
   // initial state vector
-  x_ = VectorXd(5);
+  x_ = VectorXd::Zero(5);
 
   // initial covariance matrix
-  P_ = MatrixXd(5, 5);
+  P_ = MatrixXd::Zero(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
   std_a_ = 30;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
   std_yawdd_ = 30;
+
+  // State dimension
+  n_x_ = 5;
+
+  // Augmented state dimension
+  n_aug_ = 7;
 
   /**
    * DO NOT MODIFY measurement noise values below.
@@ -69,6 +75,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
    * 1. Initialization
    */
   if (!is_initialized_) {
+    x_.fill(0.0);
     if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
       /**
        * Convert radar from polar to cartesian coordinates and initialize state
@@ -77,18 +84,26 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       float rho = meas_package.raw_measurements_[0];
       float phi = meas_package.raw_measurements_[1];
 
-      x_ << rho * cos(phi),
-            rho * sin(phi),
-            0, 0, 0;
+      x_(0) = rho * cos(phi);
+      x_(1) = rho * sin(phi);
     } else {
       /**
        * Initialize state
        */
 
-      x_ << meas_package.raw_measurements_[0],
-            meas_package.raw_measurements_[1],
-            0, 0, 0;
+      x_(0) = meas_package.raw_measurements_[0];
+      x_(1) = meas_package.raw_measurements_[1];
     }
+
+    /**
+     * Initialize  state covariance matrix
+     */
+    P_.fill(0.0);
+    P_(0, 0) = 10;
+    P_(1, 1) = 10;
+    P_(2, 2) = 100;
+    P_(3, 3) = 100;
+    P_(4 ,4) = 100;
 
     is_initialized_ = true;
     return;

@@ -2,8 +2,14 @@
 #include "Eigen/Dense"
 #include <cmath>
 
+#define EPS 1e-8
+
 using std::cos;
 using std::sin;
+using std::abs;
+using std::pow;
+using std::sqrt;
+
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
@@ -18,22 +24,16 @@ UKF::UKF() {
   use_radar_ = true;
 
   // initial state vector
-  x_ = VectorXd::Zero(5);
+  x_ = VectorXd(5);
 
   // initial covariance matrix
-  P_ = MatrixXd::Zero(5, 5);
+  P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
   std_a_ = 30;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
   std_yawdd_ = 30;
-
-  // State dimension
-  n_x_ = 5;
-
-  // Augmented state dimension
-  n_aug_ = 7;
 
   /**
    * DO NOT MODIFY measurement noise values below.
@@ -63,6 +63,25 @@ UKF::UKF() {
    * TODO: Complete the initialization. See ukf.h for other member properties.
    * Hint: one or more values initialized above might be wildly off...
    */
+
+  // State dimension
+  n_x_ = 5;
+
+  // Augmented state dimension
+  n_aug_ = 7;
+
+  // Sigma point spreading parameter
+  lambda_ = 3 - n_aug_;
+
+  // Number of sigma points
+  n_sig_ = 2 * n_aug_ + 1;
+
+  // Sigma points weights
+  weights_ = VectorXd(n_sig_);
+  weights_(0) = lambda_ / (lambda_ + n_aug_);
+  for (int i = 1; i < n_sig_; i++) {
+    weights_(i) = 1 / (lambda_ + n_aug_) * 0.5;
+  }
 }
 
 UKF::~UKF() {}
@@ -125,11 +144,93 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 }
 
 void UKF::Prediction(double delta_t) {
+
   /**
-   * TODO: Complete this function! Estimate the object's location.
-   * Modify the state vector, x_. Predict sigma points, the state,
-   * and the state covariance matrix.
+   * Create augmented mean vector
    */
+  VectorXd x_aug = VectorXd::Zero(7);
+  x_aug.head(5) = x_;
+
+  /**
+   * Create augmented state covariance
+   */
+  MatrixXd P_aug = MatrixXd::Zero(7, 7);
+  P_aug.topLeftCorner(5, 5) = P_;
+  P_aug(5, 5) = pow(std_a_, 2);
+  P_aug(6, 6) = pow(std_yawdd_, 2);
+
+  /**
+   * Create square root matrix
+   */
+  MatrixXd A = P_aug.llt().matrixL();
+  double coeff = sqrt(lambda_ + n_aug_);
+
+  /**
+   * Create sigma points
+   */
+  MatrixXd Xsig_aug = MatrixXd(n_aug_, 2 * n_aug_ + 1);
+  Xsig_aug << VectorXd::Zero(7), coeff * A, -coeff * A;
+  Xsig_aug.colwise() += x_aug;
+
+  /**
+   * Predict sigma points
+   */
+  MatrixXd Xsig_pred = MatrixXd::Zero(n_x_, n_sig_);
+  for (int i = 0; i < n_sig_; i++) {
+    VectorXd sig_point = Xsig_aug.col(i);
+    VectorXd sig_point_pred = sig_point.head(5);
+
+    double v, phi, phi_d, a, phi_dd;
+
+    v      = sig_point(2);
+    phi    = sig_point(3);
+    phi_d  = sig_point(4);
+    a      = sig_point(5);
+    phi_dd = sig_point(6);
+
+    if (abs(phi_d) < EPS) {
+      // avoid division by zero
+      sig_point_pred(0) += v * cos(phi) * delta_t;
+      sig_point_pred(1) += v * sin(phi) * delta_t;
+      sig_point_pred(2) += 0;
+      sig_point_pred(3) += phi * delta_t;
+      sig_point_pred(4) += 0;
+    } else {
+      sig_point_pred(0) += v/phi_d * ( sin(phi + phi_d * delta_t) - sin(phi)),
+      sig_point_pred(1) += v/phi_d * (-cos(phi + phi_d * delta_t) + cos(phi)),
+      sig_point_pred(2) += 0;
+      sig_point_pred(3) += phi_d * delta_t;
+      sig_point_pred(4) += 0;
+    }
+
+    /**
+     * Apply process noise
+     */
+    sig_point_pred(0) += 0.5 * pow(delta_t, 2) * cos(phi) * a;
+    sig_point_pred(1) += 0.5 * pow(delta_t, 2) * sin(phi) * a;
+    sig_point_pred(2) += delta_t * a;
+    sig_point_pred(3) += 0.5 * pow(delta_t, 2) * phi_dd;
+    sig_point_pred(4) += delta_t * phi_dd;
+
+    Xsig_pred.col(i) = sig_point_pred;
+  }
+
+  /**
+   * Calculate predicted mean
+   */
+  x_.fill(0.0);
+  for (int i = 0; i < n_sig_; i++) {
+    x_ += weights_(i) * Xsig_pred.col(i);
+  }
+
+  /**
+   * Calculate predicted state covariance
+   */
+  P_.fill(0.0);
+  for (int i = 0; i < n_sig_; i++) {
+    VectorXd diff = Xsig_pred.col(i) - x_;
+    P_ += weights_(i) * diff * diff.transpose();
+  }
 }
 
 void UKF::UpdateLidar(MeasurementPackage meas_package) {

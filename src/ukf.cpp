@@ -130,19 +130,19 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     return;
   }
 
-   /**
-    * 2. Prediction
-    */
-   Prediction(delta_t);
+  /**
+   * 2. Prediction
+   */
+  Prediction(delta_t);
 
-   /**
-    * 3. Update
-    */
-    if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-        UpdateRadar(meas_package);
-    } else {
-        UpdateLidar(meas_package);
-    }
+  /**
+   * 3. Update
+   */
+  if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+    UpdateRadar(meas_package);
+  } else {
+    UpdateLidar(meas_package);
+  }
 }
 
 void UKF::Prediction(double delta_t) {

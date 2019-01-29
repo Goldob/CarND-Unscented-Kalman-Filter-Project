@@ -4,6 +4,8 @@
 
 #define EPS 1e-8
 
+#define NORMALIZE_ANGLE(a) (a = std::fmod(a + M_PI, 2*M_PI) - M_PI)
+
 using std::cos;
 using std::sin;
 using std::abs;
@@ -212,6 +214,9 @@ void UKF::Prediction(double delta_t) {
     sig_point_pred(3) += 0.5 * pow(delta_t, 2) * phi_dd;
     sig_point_pred(4) += delta_t * phi_dd;
 
+    NORMALIZE_ANGLE(sig_point_pred(3));
+    NORMALIZE_ANGLE(sig_point_pred(4));
+
     Xsig_pred.col(i) = sig_point_pred;
   }
 
@@ -222,6 +227,9 @@ void UKF::Prediction(double delta_t) {
   for (int i = 0; i < n_sig_; i++) {
     x_ += weights_(i) * Xsig_pred.col(i);
   }
+
+  NORMALIZE_ANGLE(x_(3));
+  NORMALIZE_ANGLE(x_(4));
 
   /**
    * Calculate predicted state covariance

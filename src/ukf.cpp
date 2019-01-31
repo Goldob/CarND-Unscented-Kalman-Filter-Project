@@ -137,9 +137,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   /**
    * 3. Update
    */
-  if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+  if (use_radar_ && meas_package.sensor_type_ == MeasurementPackage::RADAR) {
     UpdateRadar(meas_package);
-  } else {
+  }
+
+  if (use_laser_ && meas_package.sensor_type_ == MeasurementPackage::LASER) {
     UpdateLidar(meas_package);
   }
 }

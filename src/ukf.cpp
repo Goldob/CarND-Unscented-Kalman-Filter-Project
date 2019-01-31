@@ -6,7 +6,6 @@
 
 using std::cos;
 using std::sin;
-using std::abs;
 using std::pow;
 using std::sqrt;
 
@@ -30,10 +29,10 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 30;
+  std_a_ = 10;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 30;
+  std_yawdd_ = 5;
 
   /**
    * DO NOT MODIFY measurement noise values below.
@@ -118,11 +117,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
      * Initialize  state covariance matrix
      */
     P_.fill(0.0);
-    P_(0, 0) = 10;
-    P_(1, 1) = 10;
-    P_(2, 2) = 100;
-    P_(3, 3) = 100;
-    P_(4 ,4) = 100;
+    P_(0, 0) = 1;
+    P_(1, 1) = 1;
+    P_(2, 2) = 10;
+    P_(3, 3) = 10;
+    P_(4 ,4) = 10;
 
     is_initialized_ = true;
     return;
@@ -188,7 +187,7 @@ void UKF::Prediction(double delta_t) {
     a      = sig_point(5);
     phi_dd = sig_point(6);
 
-    if (abs(phi_d) < EPS) {
+    if (fabs(phi_d) < EPS) {
       // avoid division by zero
       sig_point_pred(0) += v * cos(phi) * delta_t;
       sig_point_pred(1) += v * sin(phi) * delta_t;
@@ -212,10 +211,6 @@ void UKF::Prediction(double delta_t) {
     sig_point_pred(3) += 0.5 * pow(delta_t, 2) * phi_dd;
     sig_point_pred(4) += delta_t * phi_dd;
 
-    // normalize angle phi
-    while (sig_point_pred(3) >  M_PI) sig_point_pred(3) -= 2*M_PI;
-    while (sig_point_pred(3) < -M_PI) sig_point_pred(3) += 2*M_PI;
-
     Xsig_pred_.col(i) = sig_point_pred;
   }
 
@@ -227,17 +222,18 @@ void UKF::Prediction(double delta_t) {
     x_ += weights_(i) * Xsig_pred_.col(i);
   }
 
-  // normalize angle phi
-  while (x_(3) >  M_PI) x_(3) -= 2*M_PI;
-  while (x_(3) < -M_PI) x_(3) += 2*M_PI;
-
   /**
    * Calculate predicted state covariance
    */
   P_.fill(0.0);
   for (int i = 0; i < n_sig_; i++) {
-    VectorXd diff = Xsig_pred_.col(i) - x_;
-    P_ += weights_(i) * diff * diff.transpose();
+    // state difference
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    // angle normalization
+    while (x_diff(3) >  M_PI) x_diff(3) -= 2*M_PI;
+    while (x_diff(3) < -M_PI) x_diff(3) += 2*M_PI;
+
+    P_ += weights_(i) * x_diff * x_diff.transpose();
   }
 }
 
@@ -275,10 +271,79 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 }
 
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
-  /**
-   * TODO: Complete this function! Use radar data to update the belief
-   * about the object's position. Modify the state vector, x_, and
-   * covariance, P_.
-   * You can also calculate the radar NIS, if desired.
-   */
+  int n_z = 3;
+  VectorXd z = VectorXd(n_z);
+  z << meas_package.raw_measurements_[0],
+       meas_package.raw_measurements_[1],
+       meas_package.raw_measurements_[2];
+
+  // transform sigma points into measurement space
+  MatrixXd Zsig = MatrixXd(n_z, n_sig_);
+  for (int i = 0; i < n_sig_; i++) {
+    double p_x, p_y, v, phi;
+
+    p_x   = Xsig_pred_(0, i);
+    p_y   = Xsig_pred_(1, i);
+    v     = Xsig_pred_(2, i);
+    phi   = Xsig_pred_(3, i);
+
+    Zsig(0, i) = sqrt(pow(p_x, 2) + pow(p_y, 2));
+    Zsig(1, i) = atan2(p_y, p_x);
+    Zsig(2, i) = (p_x*cos(phi) + p_y*sin(phi)) * v / Zsig(0, i);
+  }
+
+  // calculate mean predicted measurement
+  VectorXd z_pred = VectorXd::Zero(n_z);
+  for (int i = 0; i < n_sig_; i++) {
+    z_pred += weights_(i) * Zsig.col(i);
+  }
+
+  // calculate innovation covariance matrix S
+  MatrixXd S = MatrixXd::Zero(n_z, n_z);
+  for (int i = 0; i < n_sig_; i++) {
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+
+    // angle normalization
+    while (z_diff(1)>  M_PI) z_diff(1) -= 2*M_PI;
+    while (z_diff(1)< -M_PI) z_diff(1) += 2*M_PI;
+
+    S += weights_(i) * z_diff * z_diff.transpose();
+  }
+
+  // add measurement noise to covariance matrix S
+  S(0, 0) += pow(std_radr_,   2);
+  S(1, 1) += pow(std_radphi_, 2);
+  S(2, 2) += pow(std_radrd_,  2);
+
+  // calculate cross correlation matrix
+  MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+  for (int i = 0; i < n_sig_; i++) {
+    // residual
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+
+    // angle normalization
+    while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
+    while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
+
+    // state difference
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    // angle normalization
+    while (x_diff(3) >  M_PI) x_diff(3) -= 2*M_PI;
+    while (x_diff(3) < -M_PI) x_diff(3) += 2*M_PI;
+
+    Tc = Tc + weights_(i) * x_diff * z_diff.transpose();
+  }
+
+  // calculate Kalman gain K;
+  MatrixXd K = Tc * S.inverse();
+
+  // update state mean and covariance matrix
+  VectorXd z_diff = z - z_pred;
+
+  // angle normalization
+  while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
+  while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
+
+  x_ += K * z_diff;
+  P_ -= K * S * K.transpose();
 }

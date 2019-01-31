@@ -175,7 +175,7 @@ void UKF::Prediction(double delta_t) {
   /**
    * Predict sigma points
    */
-  MatrixXd Xsig_pred = MatrixXd::Zero(n_x_, n_sig_);
+  Xsig_pred_ = MatrixXd::Zero(n_x_, n_sig_);
   for (int i = 0; i < n_sig_; i++) {
     VectorXd sig_point = Xsig_aug.col(i);
     VectorXd sig_point_pred = sig_point.head(5);
@@ -216,7 +216,7 @@ void UKF::Prediction(double delta_t) {
     while (sig_point_pred(3) >  M_PI) sig_point_pred(3) -= 2*M_PI;
     while (sig_point_pred(3) < -M_PI) sig_point_pred(3) += 2*M_PI;
 
-    Xsig_pred.col(i) = sig_point_pred;
+    Xsig_pred_.col(i) = sig_point_pred;
   }
 
   /**
@@ -224,7 +224,7 @@ void UKF::Prediction(double delta_t) {
    */
   x_.fill(0.0);
   for (int i = 0; i < n_sig_; i++) {
-    x_ += weights_(i) * Xsig_pred.col(i);
+    x_ += weights_(i) * Xsig_pred_.col(i);
   }
 
   // normalize angle phi
@@ -236,7 +236,7 @@ void UKF::Prediction(double delta_t) {
    */
   P_.fill(0.0);
   for (int i = 0; i < n_sig_; i++) {
-    VectorXd diff = Xsig_pred.col(i) - x_;
+    VectorXd diff = Xsig_pred_.col(i) - x_;
     P_ += weights_(i) * diff * diff.transpose();
   }
 }

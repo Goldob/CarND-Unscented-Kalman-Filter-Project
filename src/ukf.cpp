@@ -58,11 +58,6 @@ UKF::UKF() {
    * End DO NOT MODIFY section for measurement noise values
    */
 
-  /**
-   * TODO: Complete the initialization. See ukf.h for other member properties.
-   * Hint: one or more values initialized above might be wildly off...
-   */
-
   // State dimension
   n_x_ = 5;
 
@@ -284,7 +279,9 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
        meas_package.raw_measurements_[1],
        meas_package.raw_measurements_[2];
 
-  // transform sigma points into measurement space
+  /*
+   * Transform sigma points into measurement space
+   */
   MatrixXd Zsig = MatrixXd(n_z, n_sig_);
   for (int i = 0; i < n_sig_; i++) {
     double p_x, p_y, v, phi;
@@ -299,13 +296,17 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     Zsig(2, i) = (p_x*cos(phi) + p_y*sin(phi)) * v / Zsig(0, i);
   }
 
-  // calculate mean predicted measurement
+  /*
+   * Calculate mean predicted measurement
+   */
   VectorXd z_pred = VectorXd::Zero(n_z);
   for (int i = 0; i < n_sig_; i++) {
     z_pred += weights_(i) * Zsig.col(i);
   }
 
-  // calculate innovation covariance matrix S
+  /*
+   * Calculate innovation covariance matrix S
+  */
   MatrixXd S = MatrixXd::Zero(n_z, n_z);
   for (int i = 0; i < n_sig_; i++) {
     VectorXd z_diff = Zsig.col(i) - z_pred;
@@ -317,12 +318,16 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     S += weights_(i) * z_diff * z_diff.transpose();
   }
 
-  // add measurement noise to covariance matrix S
+  /*
+   * Add measurement noise to covariance matrix S
+   */
   S(0, 0) += pow(std_radr_,   2);
   S(1, 1) += pow(std_radphi_, 2);
   S(2, 2) += pow(std_radrd_,  2);
 
-  // calculate cross correlation matrix
+  /*
+   * Calculate cross correlation matrix
+   */
   MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
   for (int i = 0; i < n_sig_; i++) {
     // residual
@@ -341,10 +346,14 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     Tc = Tc + weights_(i) * x_diff * z_diff.transpose();
   }
 
-  // calculate Kalman gain K;
+  /*
+   * Calculate Kalman gain K
+   */
   MatrixXd K = Tc * S.inverse();
 
-  // update state mean and covariance matrix
+  /*
+   * Update state mean and covariance matrix
+   */
   VectorXd z_diff = z - z_pred;
 
   // angle normalization
